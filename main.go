@@ -25,8 +25,8 @@ func main() {
 	log.Info("connected to Ethereum node", "version", version)
 
 	blockHeightChan := make(chan int, 10000)
-	txHashChan := make(chan string, 10000)
-	txChan := make(chan *ethrpc.Transaction, 10000)
+	txHashChan := make(chan *TxHash, 10000)
+	txChan := make(chan *Tx, 10000)
 	wt := sync.WaitGroup{}
 
 	// list all blocks to fetch
@@ -51,7 +51,7 @@ func main() {
 			}
 			log.Debug("successfully got block", "blockNumber", block.Number)
 			for _, tx := range block.Transactions {
-				txHashChan <- tx.Hash
+				txHashChan <- &TxHash{block.Timestamp, tx.Hash}
 			}
 		}
 		log.Info("finished fetching all blocks")
@@ -63,12 +63,12 @@ func main() {
 	// fetch all transactions
 	go func() {
 		for txHash := range txHashChan {
-			transaction, err := client.EthGetTransactionByHash(txHash)
+			transaction, err := client.EthGetTransactionByHash(txHash.hash)
 			if err != nil {
 				log.Error("failed to get transaction", "txiHash", txHash)
 				continue
 			}
-			txChan <- transaction
+			txChan <- &Tx{txHash.timestamp, transaction}
 			log.Debug("successfully got transaction", "txHash", transaction.Hash)
 		}
 		close(txChan)
