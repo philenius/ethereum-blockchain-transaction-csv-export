@@ -16,13 +16,14 @@ func main() {
 
 	start := time.Now()
 
+	blockConcurr := flag.Int("blockConcurr", 10, "The count of concurrent workers for fetching blocks.")
+	blockCount := flag.Int("count", 1000, "The total amount of blocks to fetch.")
 	hostname := flag.String("host", "127.0.0.1", "The hostname / IP address of the Ethereum node.")
 	port := flag.Int("port", 8545, "The port number of the Ethereum node.")
-	startHeight := flag.Int("start", 0, "The height / number of the block where to start.")
-	blockCount := flag.Int("count", 1000, "The total amount of blocks to fetch.")
-	blockConcurr := flag.Int("blockConcurr", 10, "The count of concurrent workers for fetching block.")
-	txConcurr := flag.Int("txConcurr", 20, "The count of concurrent workers for fetching transactions.")
+	startHeight := flag.Int("start", 0, "The height / number of the first block to fetch.")
 	statsInterval := flag.Int("statsIntervalSec", 5, "The invertal in seconds to display stats.")
+	txConcurr := flag.Int("txConcurr", 20, "The count of concurrent workers for fetching transactions.")
+
 	flag.Parse()
 
 	clientAddr := fmt.Sprintf("http://%s:%d", *hostname, *port)
@@ -136,7 +137,7 @@ func main() {
 	wt.Wait()
 
 	elapsed := time.Since(start).Round(time.Minute)
-	log.Warn("application successfully completed",
+	log.Warn("application completed successfully",
 		"durationInMinutes", int(elapsed.Minutes()),
 		"startHeight", *startHeight,
 		"endHeight", *startHeight+*blockCount,
