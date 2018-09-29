@@ -21,7 +21,8 @@ func main() {
 	startHeight := flag.Int("start", 0, "The height / number of the block where to start.")
 	blockCount := flag.Int("count", 1000, "The total amount of blocks to fetch.")
 	blockConcurr := flag.Int("blockConcurr", 10, "The count of concurrent workers for fetching block.")
-	txConcurr := flag.Int("txConcurr", 10, "The count of concurrent workers for fetching transactions.")
+	txConcurr := flag.Int("txConcurr", 20, "The count of concurrent workers for fetching transactions.")
+	statsInterval := flag.Int("statsIntervalSec", 5, "The invertal in seconds to display stats.")
 	flag.Parse()
 
 	clientAddr := fmt.Sprintf("http://%s:%d", *hostname, *port)
@@ -37,29 +38,49 @@ func main() {
 	txChan := make(chan *work.Job, 10000)
 	failedBlockChan := make(chan *work.Job, 10000)
 	failedTxChan := make(chan *work.Job, 10000)
-	latestBlock := 0
-	latestTransactionCount := int64(0)
+	statsChan := make(chan *work.Stat, 10000)
 	wt := sync.WaitGroup{}
 
+	latestBlockHeight := 0
+	fetchedBlockCount := 0
+	fetchedTxCount := int64(0)
+
+	// receive all stats and store result in vars
 	go func() {
+		for stat := range statsChan {
+			if stat.FetchedBlock {
+				fetchedBlockCount++
+				latestBlockHeight = stat.BlockHeight
+			}
+			if stat.FetchedTransaction {
+				fetchedTxCount++
+			}
+		}
+	}()
 
-		latestLatestBlock := 0
-		latestLatestTransactionCount := int64(0)
+	// display stats periodically
+	go func() {
+		lastFetchedBlockCount := 0
+		lastTransactionCount := int64(0)
 
-		for range time.NewTicker(time.Second * 5).C {
-			blockDiff := latestBlock - latestLatestBlock
-			blockRate := float32(blockDiff) / 5
-			txDiff := latestTransactionCount - latestLatestTransactionCount
-			txRate := float32(txDiff) / 5
+		for range time.NewTicker(time.Second * time.Duration(*statsInterval)).C {
+			blockDiff := fetchedBlockCount - lastFetchedBlockCount
+			blockRate := float32(blockDiff) / float32(*statsInterval)
+
+			txDiff := fetchedTxCount - lastTransactionCount
+			txRate := float32(txDiff) / float32(*statsInterval)
 			log.Warn("stats",
-				"lastestFetchedBlock", latestBlock,
-				"blockRatePerSec", blockRate,
-				"fetchedTransactions", latestTransactionCount,
-				"txRatePerSec", txRate,
-				"txHashChanLen", len(txHashChan),
+				"totalFetchedBlocks", fetchedBlockCount,
+				"lastestFetchedBlock", latestBlockHeight,
+				"blockFetchRatePerSec", blockRate,
+				"totalFetchedTransactions", fetchedTxCount,
+				"txFetchRatePerSec", txRate,
+				"chanLengthRemainingBlockJobs", len(blockHeightChan),
+				"chanLengthRemainingTransactionJobs", len(txHashChan),
+				"chanLengthRemainingTransactionFileWrites", len(txChan),
 			)
-			latestLatestBlock = latestBlock
-			latestLatestTransactionCount = latestTransactionCount
+			lastFetchedBlockCount = fetchedBlockCount
+			lastTransactionCount = fetchedTxCount
 		}
 	}()
 
@@ -77,7 +98,9 @@ func main() {
 
 	// fetch all blocks
 	go func() {
-		p := work.NewBlockWorkerPool(*blockConcurr, clientAddr, blockHeightChan, txHashChan, failedBlockChan)
+		p := work.NewBlockWorkerPool(
+			*blockConcurr, clientAddr, blockHeightChan, txHashChan, failedBlockChan, statsChan,
+		)
 		p.Run()
 		wt.Done()
 	}()
@@ -85,7 +108,7 @@ func main() {
 
 	// fetch all transactions
 	go func() {
-		p := work.NewTxWorkerPool(*txConcurr, clientAddr, txHashChan, txChan, failedTxChan)
+		p := work.NewTxWorkerPool(*txConcurr, clientAddr, txHashChan, txChan, failedTxChan, statsChan)
 		p.Run()
 		wt.Done()
 	}()
@@ -119,5 +142,6 @@ func main() {
 		"endHeight", *startHeight+*blockCount,
 		"blockCount", *blockCount,
 	)
+	close(statsChan)
 
 }

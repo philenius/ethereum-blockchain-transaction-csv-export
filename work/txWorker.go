@@ -12,12 +12,13 @@ type TxWorker struct {
 	jobs       chan *Job
 	result     chan *Job
 	failedJobs chan *Job
+	stats      chan *Stat
 	wt         *sync.WaitGroup
 }
 
 func (w *TxWorker) doWork() {
 	for job := range w.jobs {
-		//latestTransactionCount++
+		w.stats <- &Stat{FetchedTransaction: true}
 		transaction, err := w.client.EthGetTransactionByHash(job.TxHash)
 		if err != nil || transaction.BlockNumber == nil || transaction.TransactionIndex == nil {
 			w.failedJobs <- job

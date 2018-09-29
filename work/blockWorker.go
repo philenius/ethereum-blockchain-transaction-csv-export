@@ -12,12 +12,13 @@ type BlockWorker struct {
 	jobs       chan *Job
 	result     chan *Job
 	failedJobs chan *Job
+	stats      chan *Stat
 	wt         *sync.WaitGroup
 }
 
 func (w *BlockWorker) doWork() {
 	for job := range w.jobs {
-		//latestBlock = blockHeight
+		w.stats <- &Stat{FetchedBlock: true, BlockHeight: job.BlockHeight}
 		block, err := w.client.EthGetBlockByNumber(job.BlockHeight, true)
 		if err != nil {
 			w.failedJobs <- job
