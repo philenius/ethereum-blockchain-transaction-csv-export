@@ -4,12 +4,15 @@ import (
 	"flag"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/mgutz/logxi/v1"
 	"github.com/onrik/ethrpc"
 )
 
 func main() {
+
+	start := time.Now()
 
 	hostname := flag.String("host", "127.0.0.1", "The hostname / IP address of the Ethereum node.")
 	port := flag.Int("port", 8545, "The port number of the Ethereum node.")
@@ -104,6 +107,13 @@ func main() {
 
 	log.Info("waiting for application to fetch all data from Ethereum node")
 	wt.Wait()
-	log.Info("application completed")
+
+	elapsed := time.Since(start).Round(time.Minute)
+	log.Warn("application successfully completed",
+		"durationInMinutes", int(elapsed.Minutes()),
+		"startHeight", *startHeight,
+		"endHeight", *startHeight+*blockCount,
+		"blockCount", *blockCount,
+	)
 
 }
