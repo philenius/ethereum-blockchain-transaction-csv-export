@@ -20,19 +20,37 @@ func main() {
 	blockCount := flag.Int("count", 1000, "The total amount of blocks to fetch.")
 	flag.Parse()
 
-	client := ethrpc.New(fmt.Sprintf("http://%s:%d", *hostname, *port))
+	client := ethrpc.NewEthRPC(fmt.Sprintf("http://%s:%d", *hostname, *port))
 	version, err := client.Web3ClientVersion()
 	if err != nil {
 		log.Fatal("failed to connect to Ethereum node", "err", err.Error())
 	}
-	log.Info("connected to Ethereum node", "version", version)
+	log.Info("successfully connected to Ethereum node", "host", *hostname, "port", *port, "version", version)
 
 	blockHeightChan := make(chan int, 10000)
 	txHashChan := make(chan *TxHash, 10000)
 	txChan := make(chan *Tx, 10000)
 	failedBlockChan := make(chan int, 10000)
 	failedTxChan := make(chan string, 10000)
+	latestBlock := 0
+	latestTransactionCount := int64(0)
 	wt := sync.WaitGroup{}
+
+	go func() {
+
+		latestLatestBlock := 0
+		latestLatestTransactionCount := int64(0)
+
+		for range time.NewTicker(time.Second * 3).C {
+			blockDiff := latestBlock - latestLatestBlock
+			blockRate := float32(blockDiff) / 3
+			txDiff := latestTransactionCount - latestLatestTransactionCount
+			txRate := float32(txDiff) / 3
+			log.Warn("stats", "lastestFetchedBlock", latestBlock, "blockRatePerSec", blockRate, "fetchedTransactions", latestTransactionCount, "txRatePerSec", txRate)
+			latestLatestBlock = latestBlock
+			latestLatestTransactionCount = latestTransactionCount
+		}
+	}()
 
 	// list all blocks to fetch
 	go func() {
@@ -49,13 +67,16 @@ func main() {
 	// fetch all blocks
 	go func() {
 		for blockHeight := range blockHeightChan {
+			latestBlock = blockHeight
 			block, err := client.EthGetBlockByNumber(blockHeight, true)
 			if err != nil {
 				failedBlockChan <- blockHeight
 				log.Error("failed to get block", "blockNumber", *blockCount, "err", err.Error())
 				continue
 			}
-			log.Debug("successfully got block", "blockNumber", block.Number)
+			if log.IsDebug() {
+				log.Debug("successfully got block", "blockNumber", block.Number)
+			}
 			for _, tx := range block.Transactions {
 				txHashChan <- &TxHash{block.Timestamp, tx.Hash}
 			}
@@ -70,6 +91,7 @@ func main() {
 	// fetch all transactions
 	go func() {
 		for txHash := range txHashChan {
+			latestTransactionCount++
 			transaction, err := client.EthGetTransactionByHash(txHash.hash)
 			if err != nil || transaction.BlockNumber == nil || transaction.TransactionIndex == nil {
 				failedTxChan <- txHash.hash
@@ -78,7 +100,9 @@ func main() {
 			}
 
 			txChan <- &Tx{txHash.timestamp, transaction}
-			log.Debug("successfully got transaction", "txHash", transaction.Hash)
+			if log.IsDebug() {
+				log.Debug("successfully got transaction", "txHash", transaction.Hash)
+			}
 		}
 		close(txChan)
 		close(failedTxChan)
