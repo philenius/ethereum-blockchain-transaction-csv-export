@@ -4,13 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"philenius/ethereum-transaction-export/models"
+	"philenius/ethereum-transaction-export/work"
 	"time"
 
 	"github.com/mgutz/logxi/v1"
 )
 
-func exportAsCSV(txChan chan *models.Tx) {
+func exportAsCSV(jobs chan *work.Job) {
 
 	now := time.Now().Format("2006-01-02-15-04-05")
 	f, err := os.Create(fmt.Sprintf("geth_tx_export_%s.csv", now))
@@ -24,13 +24,14 @@ func exportAsCSV(txChan chan *models.Tx) {
 	w.Flush()
 
 	lineBuf := 0
-	for transaction := range txChan {
-		tx := transaction.Tx
+	for job := range jobs {
+		tx := job.Tx
 
 		lineBuf++
 		line := fmt.Sprintf(
 			"%s,%d,%s,%d,%d,%s,%s,%d,%d,%d,%s,%d\n",
-			tx.Hash, tx.Nonce, tx.BlockHash, *tx.BlockNumber, *tx.TransactionIndex, tx.From, tx.To, tx.Value.Int64(), tx.Gas, tx.GasPrice.Int64(), tx.Input, transaction.Timestamp,
+			tx.Hash, tx.Nonce, tx.BlockHash, *tx.BlockNumber, *tx.TransactionIndex, tx.From, tx.To,
+			tx.Value.Int64(), tx.Gas, tx.GasPrice.Int64(), tx.Input, job.Timestamp,
 		)
 		w.WriteString(line)
 
@@ -43,7 +44,7 @@ func exportAsCSV(txChan chan *models.Tx) {
 	w.Flush()
 }
 
-func exportFailedBlocks(blockChan chan int) {
+func exportFailedBlockJobs(jobs chan *work.Job) {
 
 	f, err := os.Create("failedBlocks.txt")
 	if err != nil {
@@ -52,8 +53,8 @@ func exportFailedBlocks(blockChan chan int) {
 
 	w := bufio.NewWriter(f)
 
-	for block := range blockChan {
-		w.WriteString(fmt.Sprintf("%d\n", block))
+	for job := range jobs {
+		w.WriteString(fmt.Sprintf("%d\n", job.BlockHeight))
 		w.Flush()
 	}
 
@@ -61,7 +62,7 @@ func exportFailedBlocks(blockChan chan int) {
 	w.Flush()
 }
 
-func exportFailedTx(txChan chan *models.TxHash) {
+func exportFailedTxJobs(jobs chan *work.Job) {
 
 	f, err := os.Create("failedTransactions.txt")
 	if err != nil {
@@ -70,8 +71,8 @@ func exportFailedTx(txChan chan *models.TxHash) {
 
 	w := bufio.NewWriter(f)
 
-	for tx := range txChan {
-		w.WriteString(fmt.Sprintf("%s\n", tx.Hash))
+	for job := range jobs {
+		w.WriteString(fmt.Sprintf("%s\n", job.TxHash))
 		w.Flush()
 	}
 

@@ -1,7 +1,6 @@
 package work
 
 import (
-	"philenius/ethereum-transaction-export/models"
 	"sync"
 
 	log "github.com/mgutz/logxi/v1"
@@ -10,26 +9,43 @@ import (
 
 type Pool struct {
 	wt         *sync.WaitGroup
-	worker     []*Worker
-	jobs       chan *models.TxHash
-	results    chan *models.Tx
-	failedJobs chan *models.TxHash
+	workers    []Worker
+	results    chan *Job
+	failedJobs chan *Job
 }
 
-// NewPool instantiates a pool of workers with given concurrency
-func NewPool(concurrency int, clientAddr string, jobs chan *models.TxHash, results chan *models.Tx, failedJobs chan *models.TxHash) *Pool {
+// NewTxWorkerPool instantiates a pool of workers with given concurrency for fetching transactions.
+func NewTxWorkerPool(concurrency int, clientAddr string, jobs chan *Job, results chan *Job, failedJobs chan *Job) *Pool {
 
 	wt := &sync.WaitGroup{}
 
-	workerArr := make([]*Worker, concurrency)
+	workerArr := make([]Worker, concurrency)
 	for i := 0; i < concurrency; i++ {
-		workerArr[i] = &Worker{ethrpc.NewEthRPC(clientAddr), jobs, results, failedJobs, wt}
+		workerArr[i] = &TxWorker{ethrpc.NewEthRPC(clientAddr), jobs, results, failedJobs, wt}
 	}
 
 	return &Pool{
 		wt:         wt,
-		worker:     workerArr,
-		jobs:       jobs,
+		workers:    workerArr,
+		results:    results,
+		failedJobs: failedJobs,
+	}
+
+}
+
+// NewBlockWorkerPool instantiates a pool of workers with given concurrency for fetching blocks.
+func NewBlockWorkerPool(concurrency int, clientAddr string, jobs chan *Job, results chan *Job, failedJobs chan *Job) *Pool {
+
+	wt := &sync.WaitGroup{}
+
+	workerArr := make([]Worker, concurrency)
+	for i := 0; i < concurrency; i++ {
+		workerArr[i] = &BlockWorker{ethrpc.NewEthRPC(clientAddr), jobs, results, failedJobs, wt}
+	}
+
+	return &Pool{
+		wt:         wt,
+		workers:    workerArr,
 		results:    results,
 		failedJobs: failedJobs,
 	}
@@ -38,7 +54,7 @@ func NewPool(concurrency int, clientAddr string, jobs chan *models.TxHash, resul
 
 // Run starts the processing of incoming jobs
 func (p *Pool) Run() {
-	for _, w := range p.worker {
+	for _, w := range p.workers {
 		go w.doWork()
 		p.wt.Add(1)
 	}

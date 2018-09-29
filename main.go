@@ -9,7 +9,6 @@ import (
 	"github.com/mgutz/logxi/v1"
 	"github.com/onrik/ethrpc"
 
-	"philenius/ethereum-transaction-export/models"
 	"philenius/ethereum-transaction-export/work"
 )
 
@@ -21,6 +20,7 @@ func main() {
 	port := flag.Int("port", 8545, "The port number of the Ethereum node.")
 	startHeight := flag.Int("start", 0, "The height / number of the block where to start.")
 	blockCount := flag.Int("count", 1000, "The total amount of blocks to fetch.")
+	blockConcurr := flag.Int("blockConcurr", 10, "The count of concurrent workers for fetching block.")
 	txConcurr := flag.Int("txConcurr", 10, "The count of concurrent workers for fetching transactions.")
 	flag.Parse()
 
@@ -32,11 +32,11 @@ func main() {
 	}
 	log.Info("successfully connected to Ethereum node", "host", *hostname, "port", *port, "version", version)
 
-	blockHeightChan := make(chan int, 10000)
-	txHashChan := make(chan *models.TxHash, 10000)
-	txChan := make(chan *models.Tx, 10000)
-	failedBlockChan := make(chan int, 10000)
-	failedTxChan := make(chan *models.TxHash, 10000)
+	blockHeightChan := make(chan *work.Job, 10000)
+	txHashChan := make(chan *work.Job, 10000)
+	txChan := make(chan *work.Job, 10000)
+	failedBlockChan := make(chan *work.Job, 10000)
+	failedTxChan := make(chan *work.Job, 10000)
 	latestBlock := 0
 	latestTransactionCount := int64(0)
 	wt := sync.WaitGroup{}
@@ -67,7 +67,7 @@ func main() {
 	go func() {
 		endHeight := *startHeight + *blockCount
 		for i := *startHeight; i < endHeight; i++ {
-			blockHeightChan <- i
+			blockHeightChan <- &work.Job{BlockHeight: i}
 		}
 		log.Info("finished listing block numbers")
 		close(blockHeightChan)
@@ -77,44 +77,28 @@ func main() {
 
 	// fetch all blocks
 	go func() {
-		for blockHeight := range blockHeightChan {
-			latestBlock = blockHeight
-			block, err := client.EthGetBlockByNumber(blockHeight, true)
-			if err != nil {
-				failedBlockChan <- blockHeight
-				log.Error("failed to get block", "blockNumber", *blockCount, "err", err.Error())
-				continue
-			}
-			if log.IsDebug() {
-				log.Debug("successfully got block", "blockNumber", block.Number)
-			}
-			for _, tx := range block.Transactions {
-				txHashChan <- &models.TxHash{block.Timestamp, tx.Hash}
-			}
-		}
-		close(txHashChan)
-		close(failedBlockChan)
-		log.Info("finished fetching all blocks")
+		p := work.NewBlockWorkerPool(*blockConcurr, clientAddr, blockHeightChan, txHashChan, failedBlockChan)
+		p.Run()
 		wt.Done()
 	}()
 	wt.Add(1)
 
 	// fetch all transactions
 	go func() {
-		p := work.NewPool(*txConcurr, clientAddr, txHashChan, txChan, failedTxChan)
+		p := work.NewTxWorkerPool(*txConcurr, clientAddr, txHashChan, txChan, failedTxChan)
 		p.Run()
 		wt.Done()
 	}()
 	wt.Add(1)
 
 	go func() {
-		exportFailedBlocks(failedBlockChan)
+		exportFailedBlockJobs(failedBlockChan)
 		wt.Done()
 	}()
 	wt.Add(1)
 
 	go func() {
-		exportFailedTx(failedTxChan)
+		exportFailedTxJobs(failedTxChan)
 		wt.Done()
 	}()
 	wt.Add(1)
