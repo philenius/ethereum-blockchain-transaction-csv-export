@@ -27,6 +27,8 @@ func main() {
 	blockHeightChan := make(chan int, 10000)
 	txHashChan := make(chan *TxHash, 10000)
 	txChan := make(chan *Tx, 10000)
+	failedBlockChan := make(chan int, 10000)
+	failedTxChan := make(chan string, 10000)
 	wt := sync.WaitGroup{}
 
 	// list all blocks to fetch
@@ -46,6 +48,7 @@ func main() {
 		for blockHeight := range blockHeightChan {
 			block, err := client.EthGetBlockByNumber(blockHeight, true)
 			if err != nil {
+				failedBlockChan <- blockHeight
 				log.Error("failed to get block", "blockNumber", *blockCount, "err", err.Error())
 				continue
 			}
@@ -54,8 +57,9 @@ func main() {
 				txHashChan <- &TxHash{block.Timestamp, tx.Hash}
 			}
 		}
-		log.Info("finished fetching all blocks")
 		close(txHashChan)
+		close(failedBlockChan)
+		log.Info("finished fetching all blocks")
 		wt.Done()
 	}()
 	wt.Add(1)
@@ -64,15 +68,30 @@ func main() {
 	go func() {
 		for txHash := range txHashChan {
 			transaction, err := client.EthGetTransactionByHash(txHash.hash)
-			if err != nil {
-				log.Error("failed to get transaction", "txiHash", txHash)
+			if err != nil || transaction.BlockNumber == nil || transaction.TransactionIndex == nil {
+				failedTxChan <- txHash.hash
+				log.Error("failed to get transaction", "txHash", txHash.hash)
 				continue
 			}
+
 			txChan <- &Tx{txHash.timestamp, transaction}
 			log.Debug("successfully got transaction", "txHash", transaction.Hash)
 		}
 		close(txChan)
+		close(failedTxChan)
 		log.Info("finished fetching all transactions")
+		wt.Done()
+	}()
+	wt.Add(1)
+
+	go func() {
+		exportFailedBlocks(failedBlockChan)
+		wt.Done()
+	}()
+	wt.Add(1)
+
+	go func() {
+		exportFailedTx(failedTxChan)
 		wt.Done()
 	}()
 	wt.Add(1)
