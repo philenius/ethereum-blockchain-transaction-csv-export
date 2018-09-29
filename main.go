@@ -9,7 +9,7 @@ import (
 	"github.com/mgutz/logxi/v1"
 	"github.com/onrik/ethrpc"
 
-	"philenius/ethereum-transaction-export/work"
+	"philenius/ethereum-blockchain-transaction-csv-export/work"
 )
 
 func main() {
