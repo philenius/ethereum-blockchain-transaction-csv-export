@@ -4,12 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"philenius/ethereum-transaction-export/models"
 	"time"
 
 	"github.com/mgutz/logxi/v1"
 )
 
-func exportAsCSV(txChan chan *Tx) {
+func exportAsCSV(txChan chan *models.Tx) {
 
 	now := time.Now().Format("2006-01-02-15-04-05")
 	f, err := os.Create(fmt.Sprintf("geth_tx_export_%s.csv", now))
@@ -24,12 +25,12 @@ func exportAsCSV(txChan chan *Tx) {
 
 	lineBuf := 0
 	for transaction := range txChan {
-		tx := transaction.tx
+		tx := transaction.Tx
 
 		lineBuf++
 		line := fmt.Sprintf(
 			"%s,%d,%s,%d,%d,%s,%s,%d,%d,%d,%s,%d\n",
-			tx.Hash, tx.Nonce, tx.BlockHash, *tx.BlockNumber, *tx.TransactionIndex, tx.From, tx.To, tx.Value.Int64(), tx.Gas, tx.GasPrice.Int64(), tx.Input, transaction.timestamp,
+			tx.Hash, tx.Nonce, tx.BlockHash, *tx.BlockNumber, *tx.TransactionIndex, tx.From, tx.To, tx.Value.Int64(), tx.Gas, tx.GasPrice.Int64(), tx.Input, transaction.Timestamp,
 		)
 		w.WriteString(line)
 
@@ -60,7 +61,7 @@ func exportFailedBlocks(blockChan chan int) {
 	w.Flush()
 }
 
-func exportFailedTx(txChan chan string) {
+func exportFailedTx(txChan chan *models.TxHash) {
 
 	f, err := os.Create("failedTransactions.txt")
 	if err != nil {
@@ -70,8 +71,7 @@ func exportFailedTx(txChan chan string) {
 	w := bufio.NewWriter(f)
 
 	for tx := range txChan {
-		fmt.Println(tx)
-		w.WriteString(fmt.Sprintf("%s\n", tx))
+		w.WriteString(fmt.Sprintf("%s\n", tx.Hash))
 		w.Flush()
 	}
 

@@ -8,6 +8,9 @@ import (
 
 	"github.com/mgutz/logxi/v1"
 	"github.com/onrik/ethrpc"
+
+	"philenius/ethereum-transaction-export/models"
+	"philenius/ethereum-transaction-export/work"
 )
 
 func main() {
@@ -18,9 +21,11 @@ func main() {
 	port := flag.Int("port", 8545, "The port number of the Ethereum node.")
 	startHeight := flag.Int("start", 0, "The height / number of the block where to start.")
 	blockCount := flag.Int("count", 1000, "The total amount of blocks to fetch.")
+	txConcurr := flag.Int("txConcurr", 10, "The count of concurrent workers for fetching transactions.")
 	flag.Parse()
 
-	client := ethrpc.NewEthRPC(fmt.Sprintf("http://%s:%d", *hostname, *port))
+	clientAddr := fmt.Sprintf("http://%s:%d", *hostname, *port)
+	client := ethrpc.NewEthRPC(clientAddr)
 	version, err := client.Web3ClientVersion()
 	if err != nil {
 		log.Fatal("failed to connect to Ethereum node", "err", err.Error())
@@ -28,10 +33,10 @@ func main() {
 	log.Info("successfully connected to Ethereum node", "host", *hostname, "port", *port, "version", version)
 
 	blockHeightChan := make(chan int, 10000)
-	txHashChan := make(chan *TxHash, 10000)
-	txChan := make(chan *Tx, 10000)
+	txHashChan := make(chan *models.TxHash, 10000)
+	txChan := make(chan *models.Tx, 10000)
 	failedBlockChan := make(chan int, 10000)
-	failedTxChan := make(chan string, 10000)
+	failedTxChan := make(chan *models.TxHash, 10000)
 	latestBlock := 0
 	latestTransactionCount := int64(0)
 	wt := sync.WaitGroup{}
@@ -41,12 +46,18 @@ func main() {
 		latestLatestBlock := 0
 		latestLatestTransactionCount := int64(0)
 
-		for range time.NewTicker(time.Second * 3).C {
+		for range time.NewTicker(time.Second * 5).C {
 			blockDiff := latestBlock - latestLatestBlock
-			blockRate := float32(blockDiff) / 3
+			blockRate := float32(blockDiff) / 5
 			txDiff := latestTransactionCount - latestLatestTransactionCount
-			txRate := float32(txDiff) / 3
-			log.Warn("stats", "lastestFetchedBlock", latestBlock, "blockRatePerSec", blockRate, "fetchedTransactions", latestTransactionCount, "txRatePerSec", txRate)
+			txRate := float32(txDiff) / 5
+			log.Warn("stats",
+				"lastestFetchedBlock", latestBlock,
+				"blockRatePerSec", blockRate,
+				"fetchedTransactions", latestTransactionCount,
+				"txRatePerSec", txRate,
+				"txHashChanLen", len(txHashChan),
+			)
 			latestLatestBlock = latestBlock
 			latestLatestTransactionCount = latestTransactionCount
 		}
@@ -78,7 +89,7 @@ func main() {
 				log.Debug("successfully got block", "blockNumber", block.Number)
 			}
 			for _, tx := range block.Transactions {
-				txHashChan <- &TxHash{block.Timestamp, tx.Hash}
+				txHashChan <- &models.TxHash{block.Timestamp, tx.Hash}
 			}
 		}
 		close(txHashChan)
@@ -90,23 +101,8 @@ func main() {
 
 	// fetch all transactions
 	go func() {
-		for txHash := range txHashChan {
-			latestTransactionCount++
-			transaction, err := client.EthGetTransactionByHash(txHash.hash)
-			if err != nil || transaction.BlockNumber == nil || transaction.TransactionIndex == nil {
-				failedTxChan <- txHash.hash
-				log.Error("failed to get transaction", "txHash", txHash.hash)
-				continue
-			}
-
-			txChan <- &Tx{txHash.timestamp, transaction}
-			if log.IsDebug() {
-				log.Debug("successfully got transaction", "txHash", transaction.Hash)
-			}
-		}
-		close(txChan)
-		close(failedTxChan)
-		log.Info("finished fetching all transactions")
+		p := work.NewPool(*txConcurr, clientAddr, txHashChan, txChan, failedTxChan)
+		p.Run()
 		wt.Done()
 	}()
 	wt.Add(1)
