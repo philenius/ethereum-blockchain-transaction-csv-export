@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"philenius/ethereum-blockchain-transaction-csv-export/work"
+	"github.com/philenius/ethereum-blockchain-transaction-csv-export/work"
 	"time"
 
 	"github.com/mgutz/logxi/v1"
