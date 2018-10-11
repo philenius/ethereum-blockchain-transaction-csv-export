@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"github.com/philenius/ethereum-blockchain-transaction-csv-export/work"
 	"time"
+
+	"github.com/philenius/ethereum-blockchain-transaction-csv-export/work"
 
 	"github.com/mgutz/logxi/v1"
 )
@@ -29,9 +30,9 @@ func exportAsCSV(jobs chan *work.Job) {
 
 		lineBuf++
 		line := fmt.Sprintf(
-			"%s,%d,%s,%d,%d,%s,%s,%d,%d,%d,%s,%d\n",
+			"%s,%d,%s,%d,%d,%s,%s,%s,%d,%s,%s,%d\n",
 			tx.Hash, tx.Nonce, tx.BlockHash, *tx.BlockNumber, *tx.TransactionIndex, tx.From, tx.To,
-			tx.Value.Int64(), tx.Gas, tx.GasPrice.Int64(), tx.Input, job.Timestamp,
+			tx.Value.String(), tx.Gas, tx.GasPrice.String(), tx.Input, job.Timestamp,
 		)
 		w.WriteString(line)
 
