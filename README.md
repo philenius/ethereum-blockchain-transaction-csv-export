@@ -15,7 +15,7 @@ This application extracts transactions from the Ethereum blockchain and exports 
   go build
   LOGXI=* ./ethereum-blockchain-transaction-csv-export -start 46147 -count 10
   ```
-  This demo should fetch the blocks 46147 through 46157 inlcuding one the first ever made transaction on the Ethereum blockchain.  
+  This demo should fetch the blocks 46147 through 46157 including the first ever made transaction on the Ethereum blockchain.  
 
 :warning: It might take some time, until your Ethereum node synchronized enough blocks to respond to API requests for those blocks. You can also set the flag `--start` to `0`. But, keep in mind that about the first 46.000 blocks of the Ethereum blockchain contain any transactions.
 
