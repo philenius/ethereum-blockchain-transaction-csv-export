@@ -3,13 +3,13 @@
 This application extracts transactions from the Ethereum blockchain and exports the data as a CSV file. It uses the RPC API of [go-ethereum / geth](https://github.com/ethereum/go-ethereum), the Golang implementation fo the Ethereum protocol.
 
 ## Run
-* You'll need an Ethereum node for executing API requests. If you don't have your own net yet, then you can start a local Ethereum node as a Docker container with this command:
+* You'll need an Ethereum node in order to execute API requests. If you don't have your own net yet, then you can start a local Ethereum node as a Docker container with this command:
   ```bash
   docker run -d --name ethereum-node -v /home/user/ethereum:/root -p 8545:8545 -p 30303:30303 \
          ethereum/client-go --rpc --rpcapi "eth,net,web3" --rpcaddr 0.0.0.0 --syncmode "fast"
   ```
 
-* You'll also need a local installation of Golang for running this application:
+* You'll also need a local installation of Golang to run this application:
   ```bash
   go get ./...
   go build
@@ -18,6 +18,18 @@ This application extracts transactions from the Ethereum blockchain and exports 
   This demo should fetch the blocks 46147 through 46157 including the first ever made transaction on the Ethereum blockchain.  
 
 :warning: It might take some time, until your Ethereum node synchronized enough blocks to respond to API requests for those blocks. You can also set the flag `--start` to `0`. But, keep in mind that about the first 46.000 blocks of the Ethereum blockchain contain any transactions.
+
+**Another example:**  
+
+This command exports all transactions contained in the first 4 million blocks (estimated time to completion: 11 hours):
+
+```bash
+LOGXI=WRN nohup ./ethereum-blockchain-transaction-csv-export \
+    -count 4000000 \
+    -blockConcurr 20 \
+    -txConcurr 30 \
+    &
+```
 
 ## Configuration
 This application can be configured using command line flags. Type `--help` to find out more about the available configurations:
