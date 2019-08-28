@@ -1,11 +1,13 @@
 package main
 
 import (
-	"flag"
+	"bytes"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	"github.com/mgutz/logxi/v1"
 	"github.com/onrik/ethrpc"
 
@@ -16,23 +18,24 @@ func main() {
 
 	start := time.Now()
 
-	blockConcurr := flag.Int("blockConcurr", 10, "The count of concurrent workers for fetching blocks.")
-	blockCount := flag.Int("count", 1000, "The total amount of blocks to fetch.")
-	hostname := flag.String("host", "127.0.0.1", "The hostname / IP address of the Ethereum node.")
-	port := flag.Int("port", 8545, "The port number of the Ethereum node.")
-	startHeight := flag.Int("start", 0, "The height / number of the first block to fetch.")
-	statsInterval := flag.Int("statsIntervalSec", 5, "The invertal in seconds to display stats.")
-	txConcurr := flag.Int("txConcurr", 20, "The count of concurrent workers for fetching transactions.")
+	var c config
+	err := envconfig.Process("", &c)
+	if err != nil {
+		log.Error("configuration error", "err", err.Error())
+		buf := new(bytes.Buffer)
+		envconfig.Usagef("", &c, buf, envconfig.DefaultListFormat)
+		log.Info("usage", buf.String())
+		os.Exit(1)
+	}
 
-	flag.Parse()
-
-	clientAddr := fmt.Sprintf("http://%s:%d", *hostname, *port)
+	clientAddr := fmt.Sprintf("http://%s:%d", c.Hostname, c.Port)
 	client := ethrpc.NewEthRPC(clientAddr)
 	version, err := client.Web3ClientVersion()
 	if err != nil {
-		log.Fatal("failed to connect to Ethereum node", "err", err.Error())
+		log.Error("failed to connect to Ethereum node", "err", err.Error())
+		os.Exit(2)
 	}
-	log.Info("successfully connected to Ethereum node", "host", *hostname, "port", *port, "version", version)
+	log.Info("successfully connected to Ethereum node", "host", c.Hostname, "port", c.Port, "version", version)
 
 	blockHeightChan := make(chan *work.Job, 10000)
 	txHashChan := make(chan *work.Job, 10000)
@@ -64,12 +67,12 @@ func main() {
 		lastFetchedBlockCount := 0
 		lastTransactionCount := int64(0)
 
-		for range time.NewTicker(time.Second * time.Duration(*statsInterval)).C {
+		for range time.NewTicker(time.Second * time.Duration(c.StatsIntervalInSeconds)).C {
 			blockDiff := fetchedBlockCount - lastFetchedBlockCount
-			blockRate := float32(blockDiff) / float32(*statsInterval)
+			blockRate := float32(blockDiff) / float32(c.StatsIntervalInSeconds)
 
 			txDiff := fetchedTxCount - lastTransactionCount
-			txRate := float32(txDiff) / float32(*statsInterval)
+			txRate := float32(txDiff) / float32(c.StatsIntervalInSeconds)
 			log.Warn("stats",
 				"totalFetchedBlocks", fetchedBlockCount,
 				"lastestFetchedBlock", latestBlockHeight,
@@ -87,8 +90,8 @@ func main() {
 
 	// list all blocks to fetch
 	go func() {
-		endHeight := *startHeight + *blockCount
-		for i := *startHeight; i < endHeight; i++ {
+		endHeight := c.StartBlockHeight + c.BlockCount
+		for i := c.StartBlockHeight; i < endHeight; i++ {
 			blockHeightChan <- &work.Job{BlockHeight: i}
 		}
 		log.Info("finished listing block numbers")
@@ -100,7 +103,7 @@ func main() {
 	// fetch all blocks
 	go func() {
 		p := work.NewBlockWorkerPool(
-			*blockConcurr, clientAddr, blockHeightChan, txHashChan, failedBlockChan, statsChan,
+			c.WorkerCountForBlocks, clientAddr, blockHeightChan, txHashChan, failedBlockChan, statsChan,
 		)
 		p.Run()
 		wt.Done()
@@ -109,7 +112,7 @@ func main() {
 
 	// fetch all transactions
 	go func() {
-		p := work.NewTxWorkerPool(*txConcurr, clientAddr, txHashChan, txChan, failedTxChan, statsChan)
+		p := work.NewTxWorkerPool(c.WorkerCountForTransactions, clientAddr, txHashChan, txChan, failedTxChan, statsChan)
 		p.Run()
 		wt.Done()
 	}()
@@ -139,9 +142,9 @@ func main() {
 	elapsed := time.Since(start).Round(time.Minute)
 	log.Warn("application completed successfully",
 		"durationInMinutes", int(elapsed.Minutes()),
-		"startHeight", *startHeight,
-		"endHeight", *startHeight+*blockCount,
-		"blockCount", *blockCount,
+		"startHeight", c.StartBlockHeight,
+		"endHeight", c.StartBlockHeight+c.BlockCount,
+		"blockCount", c.BlockCount,
 	)
 	close(statsChan)
 
