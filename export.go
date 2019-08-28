@@ -14,7 +14,7 @@ import (
 func exportAsCSV(jobs chan *work.Job) {
 
 	now := time.Now().Format("2006-01-02-15-04-05")
-	f, err := os.Create(fmt.Sprintf("geth_tx_export_%s.csv", now))
+	f, err := os.Create(fmt.Sprintf("/output/geth_tx_export_%s.csv", now))
 	if err != nil {
 		log.Fatal("failed to open output file", "err", err.Error())
 	}
@@ -47,7 +47,7 @@ func exportAsCSV(jobs chan *work.Job) {
 
 func exportFailedBlockJobs(jobs chan *work.Job) {
 
-	f, err := os.Create("failedBlocks.txt")
+	f, err := os.Create("/output/failedBlocks.txt")
 	if err != nil {
 		log.Fatal("failed to create block error file", "err", err.Error())
 	}
@@ -65,7 +65,7 @@ func exportFailedBlockJobs(jobs chan *work.Job) {
 
 func exportFailedTxJobs(jobs chan *work.Job) {
 
-	f, err := os.Create("failedTransactions.txt")
+	f, err := os.Create("/output/failedTransactions.txt")
 	if err != nil {
 		log.Fatal("failed to create transaction error file", "err", err.Error())
 	}
