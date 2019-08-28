@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/philenius/ethereum-blockchain-transaction-csv-export/work"
+	"ethereum-blockchain-transaction-csv-export/work"
 
 	"github.com/mgutz/logxi/v1"
 )
